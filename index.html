@@ -24,7 +24,8 @@
   <div id="fatal" class="notice error" role="alert" hidden></div>
   <div id="boot" class="empty">Открываем вашу историю…</div>
   <section id="overview" class="view" hidden aria-labelledby="overview-title">
-    <div class="heading"><div><p class="eyebrow">Всё под контролем</p><h1 id="overview-title">Ваши расходы</h1></div><label class="period-label"><span class="sr-only">Месяц обзора</span><select id="overview-month" aria-label="Месяц обзора"></select></label></div>
+    <div class="heading"><div><p class="eyebrow">Всё под контролем</p><h1 id="overview-title">Ваши расходы</h1></div><label class="period-label"><span class="sr-only">Период обзора</span><select id="overview-month" aria-label="Период обзора"></select></label></div>
+    <div id="overview-range" class="date-range" hidden><label>С даты<input id="overview-from" type="date" aria-label="Начало периода"></label><label>По дату<input id="overview-to" type="date" aria-label="Окончание периода"></label></div><p id="overview-period-error" class="form-error" role="alert" hidden></p>
     <div class="summary-card">
       <p id="summary-period">Расходы за месяц</p><div id="summary-total" class="big-amount">0 ₽</div>
       <div class="summary-bottom"><span id="summary-count">0 расходов</span><span>В пересчёте на рубли</span></div>
@@ -39,12 +40,14 @@
   <section id="history" class="view" hidden aria-labelledby="history-title">
     <div class="heading"><div><p class="eyebrow">Каждая покупка на месте</p><h1 id="history-title">История</h1></div><button class="round-button" data-action="new" aria-label="Добавить расход">＋</button></div>
     <label class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Магазин, товар или комментарий" aria-label="Поиск расходов"></label>
-    <div class="filter-row"><select id="history-month" aria-label="Месяц истории"></select><select id="history-category" aria-label="Категория"><option value="">Все категории</option></select></div>
+    <div class="filter-row"><select id="history-month" aria-label="Период истории"></select><select id="history-category" aria-label="Категория"><option value="">Все категории</option></select></div>
+    <div id="history-range" class="date-range" hidden><label>С даты<input id="history-from" type="date" aria-label="Начало периода"></label><label>По дату<input id="history-to" type="date" aria-label="Окончание периода"></label></div><p id="history-period-error" class="form-error" role="alert" hidden></p>
     <p id="history-count" class="muted"></p><div id="history-list" class="expense-list"></div>
   </section>
   <section id="reports" class="view" hidden aria-labelledby="reports-title">
     <div class="heading"><div><p class="eyebrow">Понимать свои привычки</p><h1 id="reports-title">Отчёты</h1></div></div>
     <div class="filter-row"><select id="report-month" aria-label="Период отчёта"></select><button class="button secondary" id="csv-period">Скачать CSV</button></div>
+    <div id="report-range" class="date-range" hidden><label>С даты<input id="report-from" type="date" aria-label="Начало периода"></label><label>По дату<input id="report-to" type="date" aria-label="Окончание периода"></label></div><p id="report-period-error" class="form-error" role="alert" hidden></p>
     <div class="report-total"><p class="muted">Всего за выбранный период</p><strong id="report-total"></strong><p id="report-count" class="muted"></p></div>
     <h2>Распределение расходов</h2><div id="report-categories" class="category-list"></div><p class="footnote">Для валютных расходов используются сохранённые курсы. Отчёты в рублях.</p>
   </section>
@@ -56,7 +59,7 @@
     <div class="panel"><h2>Установить на телефон</h2><p>Откройте эту страницу в Chrome на Android. В меню ⋮ выберите «Установить приложение» или «Добавить на главный экран».</p><button class="button secondary full" id="install" hidden>Установить приложение</button><p id="offline-state" class="muted">Подготовка офлайн-режима…</p></div>
     <div class="panel"><h2>Хранение на устройстве</h2><p id="persist-state">Проверяем защиту от автоматической очистки…</p><button class="button secondary full" id="persist">Запросить постоянное хранение</button><p class="small">Очистка данных сайта удалит историю. Постоянное хранение не заменяет резервную копию. Обновление приложения историю не удаляет.</p></div>
     <div id="undo-panel" class="panel" hidden><h2>Недавно удалённый расход</h2><p>Можно восстановить последнюю удалённую запись.</p><button id="undo" class="button secondary">Восстановить расход</button></div>
-    <p class="footnote">Версия 1.0 · Без аккаунта, рекламы и внешних запросов к API.</p>
+    <p class="footnote">Версия 1.1 · Без аккаунта, рекламы и внешних запросов к API.</p>
   </section>
 </main>
 <nav class="bottom-nav" aria-label="Основная навигация">
@@ -71,7 +74,8 @@
   <div class="dialog-header"><div><p class="eyebrow">Записать и продолжить день</p><h2 id="editor-title">Новый расход</h2></div><button type="button" class="icon-button" id="close-editor" aria-label="Закрыть">×</button></div>
   <label>Дата<input type="date" id="expense-date" required></label>
   <label>Магазин или место<input id="expense-merchant" maxlength="500" placeholder="Например, 7-Eleven" autocomplete="off"></label>
-  <div class="form-row"><label>Валюта<select id="expense-currency"><option>THB</option><option>RUB</option><option>USD</option><option>EUR</option></select></label><label id="rate-label">Курс: ₽ за 1 <span id="rate-currency">THB</span><input id="expense-rate" type="text" inputmode="decimal" required maxlength="20"></label></div>
+  <div class="form-row"><label>Валюта<select id="expense-currency"><option>THB</option><option>RUB</option><option>USD</option><option>EUR</option><option value="MYR">MYR — малайзийский ринггит</option><option value="VND">VND — вьетнамский донг</option><option value="custom">Другая валюта…</option></select></label><label id="rate-label">Курс: ₽ за 1 <span id="rate-currency">THB</span><input id="expense-rate" type="text" inputmode="decimal" required maxlength="20"></label></div>
+  <label id="custom-currency-label" hidden>Код новой валюты<input id="custom-currency" maxlength="3" pattern="[A-Za-z]{3}" placeholder="Например, SGD" autocomplete="off" autocapitalize="characters"><span class="small">Три латинские буквы. Валюта появится в списке после сохранения расхода.</span></label>
   <p id="rate-note" class="small">Курс вводится вручную. Проверьте его перед сохранением.</p>
   <div class="section-heading"><h3>Позиции</h3><button type="button" class="text-button" id="add-item">＋ Ещё позиция</button></div>
   <p class="small">Сумма позиции — за всё указанное количество. Скидку можно указать отрицательной суммой.</p>

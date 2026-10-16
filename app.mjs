@@ -1,4 +1,4 @@
-import {CATEGORIES,localDay,validDay,moneyMinor,moneyText,rateUnits,recalculate,validateExpense,validateBackup,filterExpenses,totals,csvExport} from './core.mjs';
+import {CATEGORIES,periodBounds,normalizeCurrency,localDay,validDay,moneyMinor,moneyText,rateUnits,recalculate,validateExpense,validateBackup,filterExpenses,totals,csvExport} from './core.mjs';
 import {openLedger,snapshot,saveExpense,removeExpense,undoRemove,importBackup,markBackup,backupDocument} from './storage.mjs';
 const $ = id => document.getElementById(id);
 const escape = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
@@ -37,8 +37,36 @@ function monthOptions(id,includeAll=true) {
   const months = [...new Set([localDay().slice(0,7),...expenses.map(e=>e.date.slice(0,7))])].sort().reverse();
   select.replaceChildren();
   if (includeAll) select.add(new Option('За всё время',''));
+  select.add(new Option('Сегодня','today'));
+  select.add(new Option('Вчера','yesterday'));
+  select.add(new Option('Произвольный период','custom'));
   for (const month of months) select.add(new Option(monthLabel(month),month));
   select.value = [...select.options].some(o=>o.value===previous) ? previous : localDay().slice(0,7);
+}
+function selectedPeriod(prefix) {
+  return periodBounds($(prefix+'-month').value,{from:$(prefix+'-from').value,to:$(prefix+'-to').value});
+}
+function periodRows(prefix,extra={}) {
+  $(prefix+'-range').hidden=$(prefix+'-month').value!=='custom';
+  try {
+    const bounds=selectedPeriod(prefix);
+    $(prefix+'-period-error').hidden=true;
+    return filterExpenses(expenses,{...bounds,...extra});
+  } catch(error) {
+    $(prefix+'-period-error').textContent=errorMessage(error);
+    $(prefix+'-period-error').hidden=false;
+    return [];
+  }
+}
+function periodLabel(prefix) {
+  const value=$(prefix+'-month').value;
+  if (value==='custom') return $(prefix+'-from').value+' ? '+$(prefix+'-to').value;
+  if (value==='today') return 'Сегодня';
+  if (value==='yesterday') return 'Вчера';
+  return monthLabel(value);
+}
+function editorCurrency() {
+  return $('expense-currency').value==='custom' ? $('custom-currency').value.trim().toUpperCase() : $('expense-currency').value;
 }
 function categoryRows(element,rows) {
   const summary = totals(rows);
@@ -56,8 +84,8 @@ function expenseRows(element,rows) {
   }).join('');
 }
 function renderOverview() {
-  const rows=filterExpenses(expenses,{month:$('overview-month').value});
-  $('summary-period').textContent=monthLabel($('overview-month').value);
+  const rows=periodRows('overview');
+  $('summary-period').textContent=periodLabel('overview');
   const summary=totals(rows);
   $('summary-total').textContent=formatMoney(summary.rubTotalMinor);
   $('summary-count').textContent=summary.count+' расходов';
@@ -66,12 +94,12 @@ function renderOverview() {
   expenseRows($('recent'),rows.slice(0,5));
 }
 function renderHistory() {
-  const rows=filterExpenses(expenses,{month:$('history-month').value,query:$('search').value,category:$('history-category').value});
+  const rows=periodRows('history',{query:$('search').value,category:$('history-category').value});
   $('history-count').textContent=rows.length+' расходов · '+formatMoney(totals(rows).rubTotalMinor)+( $('history-category').value ? ' · итог целых покупок' : '');
   expenseRows($('history-list'),rows);
 }
 function renderReports() {
-  const rows=filterExpenses(expenses,{month:$('report-month').value});
+  const rows=periodRows('report');
   $('report-total').textContent=formatMoney(totals(rows).rubTotalMinor);
   $('report-count').textContent=rows.length+' расходов';
   categoryRows($('report-categories'),rows);
@@ -126,13 +154,17 @@ function readItems() {
 }
 function previewTotal() {
   try {
-    const currency=$('expense-currency').value;
+    const currency=editorCurrency();
     const total=recalculate(readItems(),currency==='RUB'?'1':$('expense-rate').value);
     $('editor-total').textContent=formatMoney(total.totalMinor,currency)+(currency==='RUB'?'':' ≈ '+formatMoney(total.rubTotalMinor));
   } catch {$('editor-total').textContent='Заполните суммы и курс';}
 }
 function syncCurrency() {
-  const currency=$('expense-currency').value;
+  const custom=$('expense-currency').value==='custom';
+  $('custom-currency-label').hidden=!custom;
+  $('custom-currency').required=custom;
+  $('custom-currency').disabled=!custom;
+  const currency=editorCurrency();
   $('rate-currency').textContent=currency;
   $('expense-rate').disabled=currency==='RUB';
   if (currency==='RUB') $('expense-rate').value='1';
@@ -152,7 +184,9 @@ function openEditor(id=null) {
   $('expense-merchant').value=editing?.merchant||'';
   $('expense-note').value=editing?.note||'';
   const currency=editing?.currency||metadata.defaults?.currency||'THB';
-  if (![...$('expense-currency').options].some(o=>o.value===currency)) $('expense-currency').add(new Option(currency,currency));
+  for (const code of new Set([currency,...expenses.map(e=>e.currency)])) {
+    if (![...$('expense-currency').options].some(o=>o.value===code)) $('expense-currency').add(new Option(code,code),$('expense-currency').options.length-1);
+  }
   $('expense-currency').value=currency;
   $('editor-items').replaceChildren(...(editing?.items||[{}]).map(itemCard));
   updateItemNumbers();syncCurrency();
@@ -168,7 +202,7 @@ function closeEditor() {
 function buildExpense() {
   const date=$('expense-date').value;
   if (!validDay(date)||date>localDay()) throw new Error('Выберите существующую дату не позднее сегодняшней.');
-  const currency=$('expense-currency').value;
+  const currency=normalizeCurrency(editorCurrency());
   const rate=currency==='RUB'?'1':$('expense-rate').value.trim().replace(',','.');
   rateUnits(rate);
   let items=readItems(), calculated;
@@ -197,7 +231,8 @@ async function exportBackup() {
   toast('Копия выгружена. Проверьте файл в «Загрузках» и сохраните в Google Drive.');
 }
 function exportCSV(all=false) {
-  const rows=all?filterExpenses(expenses):filterExpenses(expenses,{month:$('report-month').value});
+  if (!all) selectedPeriod('report');
+  const rows=all?filterExpenses(expenses):periodRows('report');
   download('expenses-'+(all?'all':$('report-month').value||'all')+'.csv',csvExport(rows),'text/csv;charset=utf-8');
   toast('CSV выгружен. Для восстановления используйте JSON-копию.');
 }
@@ -238,11 +273,18 @@ function wire() {
     else if (action) switchView(action);
   });
   for (const id of ['overview-month','history-month','history-category','report-month']) $(id).addEventListener('change',()=>{renderOverview();renderHistory();renderReports();});
+  for (const prefix of ['overview','history','report']) {
+    for (const side of ['from','to']) {
+      $(prefix+'-'+side).value=localDay();
+      $(prefix+'-'+side).addEventListener('change',()=>{renderOverview();renderHistory();renderReports();});
+    }
+  }
   $('search').addEventListener('input',renderHistory);
   $('close-editor').addEventListener('click',closeEditor);
   $('editor').addEventListener('cancel',event=>{event.preventDefault();closeEditor();});
   $('expense-form').addEventListener('input',()=>{editorDirty=true;previewTotal();});
   $('expense-currency').addEventListener('change',()=>{editorDirty=true;syncCurrency();});
+  $('custom-currency').addEventListener('input',()=>{editorDirty=true;syncCurrency();});
   $('add-item').addEventListener('click',()=>{
     if ($('editor-items').children.length>=200) return toast('Не больше 200 позиций.');
     $('editor-items').append(itemCard({},$('editor-items').children.length));updateItemNumbers();editorDirty=true;

@@ -114,12 +114,30 @@ export function validateBackup(raw) {
   });
   return {app: APP_ID, schemaVersion: 1, expenses};
 }
-export function filterExpenses(expenses, {month='', query='', category=''} = {}) {
+export function periodBounds(period, {from='',to='',now=new Date()} = {}) {
+  if (period === 'today' || period === 'yesterday') {
+    const day = new Date(now);
+    if (period === 'yesterday') day.setDate(day.getDate()-1);
+    return {from:localDay(day),to:localDay(day)};
+  }
+  if (period === 'custom') {
+    if (!validDay(from) || !validDay(to) || from > to) fail('Выберите даты: начало периода не должно быть позже окончания.');
+    return {from,to};
+  }
+  return {month:period};
+}
+export function normalizeCurrency(value) {
+  const code=String(value).trim().toUpperCase();
+  if (!/^[A-Z]{3}$/.test(code)) fail('Введите код валюты из трёх латинских букв, например MYR.');
+  return code;
+}
+export function filterExpenses(expenses, {month='', from='', to='', query='', category=''} = {}) {
   const search = query.trim().toLocaleLowerCase('ru');
   return expenses.filter(expense => (!month || expense.date.startsWith(month)) &&
+    (!from || expense.date >= from) && (!to || expense.date <= to) &&
     (!category || expense.items.some(item => item.category === category)) &&
     (!search || [expense.merchant, expense.note, ...expense.items.flatMap(item => [item.name,item.originalName,item.category])].join(' ').toLocaleLowerCase('ru').includes(search)))
-    .sort((a,b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    .sort((a,b) => b.date.localeCompare(a.date) || (Date.parse(b.createdAt)||0)-(Date.parse(a.createdAt)||0) || b.id.localeCompare(a.id,undefined,{numeric:true}));
 }
 export function totals(expenses) {
   const categories = new Map();

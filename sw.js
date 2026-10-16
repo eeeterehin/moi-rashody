@@ -1,4 +1,4 @@
-const CACHE = 'my-expenses-shell-v1';
+const CACHE = 'my-expenses-shell-v2';
 const SHELL = ['./','./index.html','./style.css','./app.mjs','./core.mjs','./storage.mjs','./manifest.webmanifest','./icon.svg','./icon-192.png','./icon-512.png'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
